@@ -2,10 +2,13 @@
 #include <fstream>
 #include <string>
 #include <stdlib.h> //for rand
+#include <unistd.h>
 
 #include "chip.h"
 
 using namespace std;
+
+const bool diss = false;
 
 void init(){
 	program_pointer = 0x200;//start at 0x200
@@ -21,7 +24,7 @@ int main(){
 	init();
 
 	ifstream file;
-	file.open("PONG",ios::in|ios::binary|ios::ate);
+	file.open("/Users/matthewtejo/CHIP-8-Emulator/roms/INVADERS",ios::in|ios::binary|ios::ate);
 	int size = file.tellg();
 	printf("%i\n",size);
 	file.seekg (0, ios::beg);
@@ -30,27 +33,40 @@ int main(){
 	memcpy(&memory[0x200],&buffer,sizeof(buffer));
 	memcpy(&memory[FONT_ADDR],&chip8_fontset,sizeof(chip8_fontset));
 	//disasemble
-	// for(int i=0;i<size;i++){
-	// 	unsigned short op_c = (unsigned char)memory[i+0x200] << 8 | (unsigned char)memory[i+1+0x200];
-	// 	//printf(" %04X\n",op_c);
-	// 	if(!skip_op){
-	// 		execute_opcode(op_c);
-	// 	}
-	// 	skip_op = false;
-	// 	i++;
-		
-	// }
-	while(true){
-		unsigned short op_c = (unsigned char)memory[program_pointer] << 8 | (unsigned char)memory[program_pointer+1];
-		//print_opcode(op_c);
-		execute_opcode(op_c);
-		if(program_pointer<GAME_ADDR){
-			printf("Invalid Memory Access\n");
-			exit(1);
+	if(diss){
+		for(int i=0;i<size;i++){
+			unsigned short op_c = (unsigned char)memory[i+0x200] << 8 | (unsigned char)memory[i+1+0x200];
+			//printf(" %04X\n",op_c);
+			execute_opcode(op_c);
+			
+			i++;
+			
 		}
-		decrement_delay_timer();
-		
-	}
+	} else {
+		while(true){
+			unsigned short op_c = (unsigned char)memory[program_pointer] << 8 | (unsigned char)memory[program_pointer+1];
+			usleep(10000);
+			// char inp;
+			// cin >> inp;
+			// delay_timer=0;
+
+			print_opcode(op_c);
+			printf("\tI: %02x , [%02x]\n",I,memory[I]);
+			printf("\tpointer %02x\n",program_pointer);
+			
+			execute_opcode(op_c);
+			if(program_pointer<GAME_ADDR){
+				printf("Invalid Memory Access\n");
+				exit(1);
+			}
+			decrement_delay_timer();
+			if(sound_timer>0){
+				printf("\a\n");
+				sound_timer--;
+			}
+			
+		}
+	}	
 	printf("\n");
 	return 0;
 }
@@ -86,7 +102,6 @@ int execute_opcode(unsigned short op_c){
 			unsigned short to_addr = op_c & 0x0FFF;
 			//need to know where program is at now
 			stack[stack_pointer] = program_pointer;
-			print_opcode(program_pointer);
 			stack_pointer++;
 			program_pointer = to_addr;
 			inc_pointer = false;
@@ -94,9 +109,7 @@ int execute_opcode(unsigned short op_c){
 				printf("ERROR stack to big\n");
 				exit(1);
 			}
-			printf("!CALL push on stack ( %u), go to %02X\n",stack_pointer,to_addr );
-			printf("%0x , %0x\n",memory[program_pointer],memory[program_pointer+1]);
-			print_opcode(program_pointer);
+			printf("CALL push on stack ( %u), go to %02X\n",stack_pointer,to_addr );
 			break;
 		}
 
@@ -152,11 +165,31 @@ int execute_opcode(unsigned short op_c){
 			unsigned int final = r & (op_c & 0x00FF);
 			V[x] = final;
 			printf("RND Using random: %u to set v[%u] to %u\n",r,x,final);
+			break;
 
 		}
 		case 0xD000:		//DXYN
 		{					//draw(Vx,Vy,N) , n is height, 8xn
 			printf("DRW() at %04x\n",op_c);
+			unsigned short n = op_c & 0x000F;
+			unsigned short x = byte_two(op_c);
+			unsigned short y = byte_three(op_c);
+			draw(V[x],V[y],n);
+			break;
+		}
+		case 0xE000:
+		{
+			switch(op_c & 0x00FF)
+			{
+				case 0x00A1:	//EXA1
+				{				//skip next op if key in v[x] isnt pressed
+					unsigned int x = byte_two(op_c);
+					if(key[V[x]]==0){
+						program_pointer+=2;
+					}
+					break;
+				}
+			}
 			break;
 		}
 		
@@ -209,7 +242,7 @@ int execute_opcode(unsigned short op_c){
 				case 0x0029:	//FX29 load font to mem
 				{				//I=sprite_addr[Vx]
 					unsigned int x = byte_two(op_c);
-					I = memory[FONT_ADDR + V[x]];
+					I = FONT_ADDR + V[x];
 					printf("LD I:%02x V[%u] (%02x) \n",I,x,V[x]);
 					break;
 				}
@@ -225,6 +258,7 @@ int execute_opcode(unsigned short op_c){
 				default:
 				{
 				printf("!F %04X , %04X\n" , op_c,(op_c&0xF000));
+					break;
 				}
 				
 			}
@@ -260,6 +294,7 @@ int execute_opcode(unsigned short op_c){
 					unsigned int y = byte_three(op_c);
 					printf("XOR %02x , x: %02x y: %02x\n",op_c, x,y);
 					V[x] = V[x] ^ V[y];
+					break;
 				}
 				case 0x0004:	//8XY2 "+"
 				{				//Vx=Vx&Vy
@@ -298,6 +333,7 @@ int execute_opcode(unsigned short op_c){
 		default:
 		{
 			printf("! %04X , %04X\n" , op_c,(op_c&0xF000));
+			break;
 		}
 	}
 	if(inc_pointer){
@@ -306,8 +342,40 @@ int execute_opcode(unsigned short op_c){
 	return 0;
 }
 
+void draw(unsigned short x,unsigned short y,unsigned short n){
+	system("clear");
+	printf("x:%u %02x y:%u %02x n:%u %02x\n",x,x,y,y,n,n );
+	for(int i=0;i<64;i++){
+		printf("-");
+	}
+	printf("\n");
+	for(unsigned int c=0;c<n;c++){
+		printf("0x%02x,",memory[I+c]);
+		for(unsigned int z=0;z<8;z++){
+			view[y+c][x+z] |= (memory[I+c] & 1 << (7-z));
+		}
+	}
+	 printf("\n");
+	for(int y=0;y<32;y++){
+		for(int x=0;x<64;x++){
+			if(view[y][x]){
+				printf("x");
+			} else {
+				printf("_");
+			}
+		}
+		printf("\n");
+	}
+}
+
+int ops = 10;
 void decrement_delay_timer(){
-	if(delay_timer>0){
-		delay_timer--;
+	ops--;
+	if(ops != 0){
+		if(delay_timer>0){
+			delay_timer--;
+		} else {
+		ops = 10;
+		}
 	}
 }

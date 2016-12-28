@@ -11,11 +11,13 @@ using namespace std;
 #define byte_two(x) x >> 8 & 0x000F
 #define byte_three(x) x >> 4 & 0x000F
 #define rand_255() rand() %255
-#define print_opcode(c) printf("%02x\n",c)
+#define print_opcode(c) printf("\tOPCODE %02x\n",c)
 
 int execute_opcode(unsigned short);
+
 void decrement_delay_timer();
 
+void draw(unsigned short x,unsigned short y,unsigned short n);
 
 unsigned char memory[4096];
 
@@ -29,6 +31,10 @@ unsigned short stack_pointer = 0; //index of stack
 unsigned short program_pointer;
 
 unsigned short I = 0;
+
+unsigned char view[64][64] = {0};
+
+unsigned char key[16] = {0};
 
 unsigned char chip8_fontset[80] = //stolen from internet
 { 
