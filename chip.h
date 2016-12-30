@@ -5,13 +5,31 @@
 
 using namespace std;
 
+//debug
+bool wait_for_input = false;
+const bool diss = true;
+#define OPCODE_DEBUG true
+//
+
 #define FONT_ADDR 0x00
 #define GAME_ADDR 0x0200
 
 #define byte_two(x) x >> 8 & 0x000F
 #define byte_three(x) x >> 4 & 0x000F
 #define rand_255() rand() %255
-#define print_opcode(c) printf("\tOPCODE %02x\n",c)
+
+
+
+
+#if OPCODE_DEBUG
+  #define opcode_debug(...) printf(__VA_ARGS__);
+  #define video_debug(...) printf(__VA_ARGS__);
+  #define print_opcode(c) printf("\tOPCODE %02x\n",c);
+#else
+  #define opcode_debug(...);
+  #define print_opcode(c);
+#define video_debug(...);
+#endif
 
 int execute_opcode(unsigned short);
 
@@ -19,6 +37,11 @@ void decrement_delay_timer();
 
 void draw(unsigned short x,unsigned short y,unsigned short n);
 
+void key_handler(char c);
+
+void clear_key_states();
+
+//variables for the machine
 unsigned char memory[4096];
 
 unsigned char V[16]; //16 registers , 16th for CF
@@ -32,10 +55,11 @@ unsigned short program_pointer;
 
 unsigned short I = 0;
 
-unsigned char view[64][64] = {0};
+unsigned char view[65][65] = {0};
 
 unsigned char key[16] = {0};
 
+//fonts
 unsigned char chip8_fontset[80] = //stolen from internet
 { 
   0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -55,3 +79,8 @@ unsigned char chip8_fontset[80] = //stolen from internet
   0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
   0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
+
+//keyboard
+fd_set rfds;
+struct timeval tv;
+struct termios old_tio, new_tio;
